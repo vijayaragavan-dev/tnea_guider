@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNEA Smart College Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="orb orb-one"></div>
+<div class="orb orb-two"></div>
+
+<main class="container py-5">
+    <section class="hero text-center mb-5">
+        <p class="badge-label">TNEA Admission Assistant</p>
+        <h1>TNEA Smart College Predictor</h1>
+        <p class="subtitle">Get data-driven Dream, Moderate, and Safe colleges in seconds.</p>
+    </section>
+
+    <section class="glass-card p-4 p-md-5 mb-4">
+        <form id="predictorForm" novalidate>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="cutoff" class="form-label">Cutoff</label>
+                    <input type="number" id="cutoff" class="form-control" min="0" max="200" step="0.5" required>
+                    <div class="invalid-feedback">Enter integer or .5 values only (0 to 200).</div>
+                </div>
+
+                <div class="col-md-4">
+                    <label for="category" class="form-label">Category</label>
+                    <select id="category" class="form-select" required>
+                        <option value="">Choose category</option>
+                        <option value="OC">OC</option>
+                        <option value="BC">BC</option>
+                        <option value="BCM">BCM</option>
+                        <option value="MBC">MBC</option>
+                        <option value="SC">SC</option>
+                        <option value="SCA">SCA</option>
+                        <option value="ST">ST</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label for="branch" class="form-label">Branch</label>
+                    <select id="branch" class="form-select">
+                        <option value="">Choose branch</option>
+                        <option value="CSE">CSE</option>
+                        <option value="IT">IT</option>
+                        <option value="ECE">ECE</option>
+                        <option value="EEE">EEE</option>
+                        <option value="MECH">MECH</option>
+                        <option value="CIVIL">CIVIL</option>
+                        <option value="AI & DS">AI &amp; DS</option>
+                        <option value="AI & ML">AI &amp; ML</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="budget" class="form-label">Budget (INR)</label>
+                    <input type="number" id="budget" class="form-control" min="50000" placeholder="e.g. 100000">
+                    <div class="form-text text-light-emphasis">Optional: Enter max fees (e.g., 50000 - 150000)</div>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="district" class="form-label">District (Optional)</label>
+                    <select id="district" class="form-select">
+                        <option value="">Any District</option>
+                        <option value="Chennai">Chennai</option>
+                        <option value="Coimbatore">Coimbatore</option>
+                        <option value="Madurai">Madurai</option>
+                        <option value="Trichy">Trichy</option>
+                        <option value="Salem">Salem</option>
+                        <option value="Vellore">Vellore</option>
+                        <option value="Tirunelveli">Tirunelveli</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="preference" class="form-label">Priority Preference (Optional)</label>
+                    <select id="preference" class="form-select">
+                        <option value="">Balanced</option>
+                        <option value="high placement">High Placement</option>
+                        <option value="low fees">Low Fees</option>
+                        <option value="top tier">Top Tier Colleges</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-grid d-md-flex justify-content-md-end mt-4">
+                <button type="submit" class="btn btn-predict px-4 py-2">Predict Colleges</button>
+            </div>
+        </form>
+    </section>
+
+    <section id="statusArea" class="mb-4"></section>
+
+    <section id="compareToolbar" class="glass-card p-3 mb-4 d-none">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <p class="mb-0 text-light-emphasis">Select at least 2 colleges to compare.</p>
+            <button id="compareButton" class="btn btn-outline-light" disabled>Compare Selected</button>
+        </div>
+    </section>
+
+    <section id="resultsSection" class="row g-4 d-none">
+        <div class="col-lg-4">
+            <div class="result-panel dream-panel h-100">
+                <h3>Dream</h3>
+                <div id="dreamList" class="result-list"></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="result-panel moderate-panel h-100">
+                <h3>Moderate</h3>
+                <div id="moderateList" class="result-list"></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="result-panel safe-panel h-100">
+                <h3>Safe</h3>
+                <div id="safeList" class="result-list"></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="chartsSection" class="glass-card p-4 mt-4 d-none">
+        <h3 class="mb-3">Recommendation Analytics</h3>
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <canvas id="placementChart"></canvas>
+            </div>
+            <div class="col-lg-4">
+                <canvas id="tierChart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <section id="comparisonSection" class="glass-card p-4 mt-4 d-none">
+        <h3 class="mb-3">College Comparison</h3>
+        <div class="table-responsive">
+            <table class="table table-dark table-striped align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>College Name</th>
+                    <th>Tier</th>
+                    <th>Cutoff</th>
+                    <th>Fees (INR)</th>
+                    <th>Placement %</th>
+                    <th>District</th>
+                </tr>
+                </thead>
+                <tbody id="comparisonBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

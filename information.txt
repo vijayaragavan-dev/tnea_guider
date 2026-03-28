@@ -1,0 +1,337 @@
+# Project Overview
+
+TNEA Guider is a full-stack college recommendation system that predicts Dream, Moderate, and Safe colleges for a student based on cutoff, category, branch, budget, and optional district.
+
+The system includes:
+- Spring Boot backend API
+- MySQL schema and sample data scripts
+- Bootstrap-based responsive frontend
+- End-to-end scoring and classification logic
+- Validation and error handling for robust API behavior
+
+## Major Step Updates
+
+### Step 1 - Backend Foundation Completed
+- Created Spring Boot 3.3.5 project targeting Java 21
+- Added required dependencies (Web, JPA, MySQL Driver, Lombok, Validation)
+- Added `application.properties` with required datasource/JPA settings
+- Implemented `./mvnw spring-boot` support with auto Maven bootstrap
+
+### Step 2 - Domain, API, and Core Logic Completed
+- Added entities: `College`, `Student`, `Recommendation`, `Weight`
+- Added repositories with clean `JpaRepository` setup
+- Implemented recommendation service with strict scoring formula and classification
+- Added `POST /api/recommend` controller endpoint
+- Added CORS for:
+  - `http://localhost:5500`
+  - `http://127.0.0.1:5500`
+
+### Step 3 - Frontend Completed
+- Built responsive UI in plain HTML/CSS/JS with Bootstrap 5
+- Implemented frontend form validation for cutoff integer/.5 rules
+- Integrated fetch API to backend endpoint
+- Added loading state, error handling, and categorized result rendering
+
+### Step 4 - Database Scripts and Testing Completed
+- Added `database/schema.sql` and `database/sample_data.sql`
+- Added backend tests for:
+  - Controller request/validation behavior
+  - Cutoff custom validator
+  - Service classification/scoring flow
+- Executed test suite successfully with `./mvnw test`
+
+### Step 5 - Packaging Verification Completed
+- Built production jar using `./mvnw -DskipTests package`
+- Verified Spring Boot repackage completed successfully
+- Confirmed backend artifact generated at `backend/target/backend-1.0.0.jar`
+
+### Step 6 - Containerized Database Option Added
+- Added `database/docker-compose.yml` for MySQL 8.4 quick startup
+- Enables zero-friction local DB boot for frontend-backend-database flow
+
+### Step 7 - Flexible Optional Filtering Update Completed
+- Updated frontend validation and form behavior:
+  - Budget accepts any numeric input without step restriction
+  - Budget minimum enforced as 50000 only when provided
+  - Branch, budget, district are now optional in UI
+  - Added budget helper hint below input
+- Updated backend request validation:
+  - `cutoff` and `category` remain mandatory
+  - `branch`, `budget`, `district` made optional
+  - Budget minimum validation (50000) applies only when value is provided
+- Updated backend service filtering to dynamic optional logic:
+  - Applies branch filter only when branch is present
+  - Applies budget filter only when budget is present
+  - Applies district filter only when district is present
+  - Supports successful predictions with only cutoff + category
+- Verified no core scoring/classification/API structure changes
+
+### Step 8 - AI Recommendation + Comparison + Analytics Upgrade Completed
+- Added dynamic user preference weighting in recommendation engine:
+  - Balanced (default)
+  - High Placement
+  - Low Fees
+  - Top Tier
+- Extended scoring with dynamic non-negative normalized weights (sum = 1)
+- Added new backend API `GET /api/compare?ids=1,2,3` for college comparison
+- Upgraded frontend with:
+  - Preference selector integrated with recommendation payload
+  - Compare checkbox on each result card
+  - Compare button and comparison table view
+  - Chart.js analytics section:
+    - Placement comparison bar chart
+    - Tier distribution doughnut chart
+  - Best Match badge for highest final score
+  - Enhanced card hover animation and polished spacing
+- Improved API error handling for invalid compare request ids (`400`)
+- Added controller test coverage for comparison endpoint
+
+# Tech Stack
+
+- Backend: Java 21, Spring Boot 3.3.5, Spring Web, Spring Data JPA, Bean Validation
+- Database: MySQL 8+ (driver included)
+- Frontend: HTML5, CSS3, JavaScript (ES6), Bootstrap 5
+- Build Tool: Maven Wrapper (`./mvnw` / `mvnw.cmd`)
+- Testing: JUnit 5, Spring Boot Test, MockMvc, Mockito
+
+# Folder Structure
+
+```
+tneaguider/
+├── backend/
+│   ├── mvnw
+│   ├── mvnw.cmd
+│   ├── pom.xml
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/tneaguider/backend/
+│       │   │   ├── config/
+│       │   │   ├── controller/
+│       │   │   ├── dto/
+│       │   │   ├── entity/
+│       │   │   ├── exception/
+│       │   │   ├── repository/
+│       │   │   ├── service/
+│       │   │   ├── validation/
+│       │   │   └── TneaGuiderApplication.java
+│       │   └── resources/application.properties
+│       └── test/java/com/tneaguider/backend/
+├── frontend/
+│   ├── index.html
+│   ├── style.css
+│   └── script.js
+├── database/
+│   ├── schema.sql
+│   └── sample_data.sql
+└── information.txt
+```
+
+# Database Schema
+
+Database name: `tnea_guider`
+
+Tables:
+
+1. `colleges`
+   - `id` (PK, auto increment)
+   - `name`
+   - `branch`
+   - `category`
+   - `district`
+   - `cutoff`
+   - `fees`
+   - `placement_rate`
+   - `tier`
+
+2. `students`
+   - `id` (PK, auto increment)
+   - `cutoff`
+   - `category`
+   - `branch`
+   - `budget`
+   - `district`
+   - `created_at`
+
+3. `recommendations`
+   - `id` (PK, auto increment)
+   - `student_id` (FK -> students.id)
+   - `college_id` (FK -> colleges.id)
+   - `final_score`
+   - `classification`
+   - `created_at`
+
+4. `weights`
+   - `id` (PK, auto increment)
+   - `weight_key` (unique)
+   - `weight_value`
+
+# API Details
+
+Base URL: `http://localhost:8080`
+
+Endpoint: `POST /api/recommend`
+
+Additional endpoint: `GET /api/compare?ids=1,2,3`
+
+Request:
+
+```json
+{
+  "cutoff": 187.5,
+  "category": "BC",
+  "branch": "CSE",
+  "budget": 100000,
+  "district": "Chennai"
+}
+```
+
+Response:
+
+```json
+{
+  "dream": [],
+  "moderate": [],
+  "safe": []
+}
+```
+
+Validation:
+- `cutoff` must be integer or `.5` only
+- Category required
+- Branch optional
+- Budget optional (minimum 50000 when provided)
+- District optional
+
+Error Handling:
+- `400` for invalid input/body
+- `404` when no colleges match
+- `503` for database access issues
+- `500` for unexpected errors
+- `400` for invalid compare id query values
+
+# Backend Logic
+
+Filtering pipeline:
+1. Fetch all colleges
+2. Always filter by `category`
+3. Filter by `branch` only when provided
+4. Filter by `budget` only when provided
+5. Filter by `district` only when provided
+
+Scoring:
+
+- `cutoff_score = student_cutoff / college_cutoff`
+- `tier_weight:`
+  - Tier 1 = 1.0
+  - Tier 2 = 0.7
+  - Tier 3 = 0.5
+- `fee_score = 1 - (college_fees / max_fees)`
+- `final_score = 0.4*cutoff_score + 0.2*(placement_rate/100) + 0.2*tier_weight + 0.2*fee_score`
+
+Dynamic preference weighting:
+- Balanced (default): cutoff 0.4, placement 0.2, tier 0.2, fees 0.2
+- High Placement: cutoff 0.3, placement 0.4, tier 0.2, fees 0.1
+- Low Fees: cutoff 0.3, placement 0.15, tier 0.15, fees 0.4
+- Top Tier: cutoff 0.3, placement 0.15, tier 0.4, fees 0.15
+- Weights are auto-normalized to preserve sum = 1 and prevent negatives
+
+Classification:
+- Dream: `college_cutoff >= student_cutoff`
+- Moderate: within `±5`
+- Safe: lower than that range
+
+Persistence:
+- Incoming student snapshot stored in `students`
+- Each returned recommendation stored in `recommendations`
+
+# Frontend Explanation
+
+- Hero section: "TNEA Smart College Predictor"
+- Form inputs:
+  - Cutoff (`step=0.5`)
+  - Category dropdown
+  - Branch dropdown
+  - Budget input
+  - District dropdown (optional)
+- Submit triggers fetch call to backend endpoint
+- Loading spinner shown during API call
+- Errors shown for:
+  - Invalid frontend validation
+  - Backend down
+  - No results
+- Results rendered in 3 columns:
+  - Dream
+  - Moderate
+  - Safe
+- Each card shows:
+  - College Name
+  - Cutoff
+  - Fees
+  - Placement %
+- Highest final score card displays `BEST MATCH` badge
+- Cards support compare selection
+- Comparison section shows selected colleges in table format
+- Chart analytics section visualizes recommendation quality and tier spread
+
+# How to Run
+
+## 1) Database Setup
+
+Run MySQL scripts in order:
+1. `database/schema.sql`
+2. `database/sample_data.sql`
+
+Optional Docker startup:
+
+```bash
+cd database
+docker compose up -d
+```
+
+## 2) Backend Setup
+
+Update password in:
+- `backend/src/main/resources/application.properties`
+
+Run backend:
+
+```bash
+cd backend
+./mvnw spring-boot
+```
+
+Windows:
+
+```bat
+cd backend
+mvnw.cmd spring-boot
+```
+
+Server starts at: `http://localhost:8080`
+
+## 3) Frontend Setup
+
+Serve `frontend` folder using Live Server on port `5500`.
+
+Open:
+- `http://localhost:5500`
+
+## 4) Backend Tests
+
+```bash
+cd backend
+./mvnw test
+```
+
+Latest local result: build success, 5 tests passed.
+
+Latest after optional-filter update: build success, 8 tests passed.
+
+# Future Scope
+
+- Add JWT authentication for student profiles
+- Add admin panel for college data and weight tuning
+- Add branch/category wise analytics dashboards
+- Add caching and pagination for large datasets
+- Add Docker Compose for one-command full stack startup
+- Add CI/CD pipeline with automated integration tests

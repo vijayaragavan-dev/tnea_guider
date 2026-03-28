@@ -1,0 +1,263 @@
+:root {
+    --bg-deep: #0f172a;
+    --bg-mid: #1e293b;
+    --card: rgba(255, 255, 255, 0.12);
+    --text-main: #f8fafc;
+    --text-muted: #cbd5e1;
+    --accent: #f59e0b;
+    --accent-dark: #b45309;
+    --dream: #34d399;
+    --moderate: #38bdf8;
+    --safe: #f97316;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Outfit", sans-serif;
+    color: var(--text-main);
+    background: radial-gradient(circle at 20% 20%, #334155 0%, transparent 35%),
+                radial-gradient(circle at 80% 70%, #1d4ed8 0%, transparent 30%),
+                linear-gradient(135deg, var(--bg-deep), var(--bg-mid));
+    overflow-x: hidden;
+}
+
+.orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    opacity: 0.4;
+    animation: float 10s ease-in-out infinite;
+}
+
+.orb-one {
+    width: 260px;
+    height: 260px;
+    background: #22d3ee;
+    top: -70px;
+    left: -90px;
+}
+
+.orb-two {
+    width: 320px;
+    height: 320px;
+    background: #f59e0b;
+    right: -110px;
+    bottom: -90px;
+    animation-delay: 2s;
+}
+
+.hero {
+    animation: reveal 0.7s ease;
+}
+
+.badge-label {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.7rem;
+    font-weight: 600;
+}
+
+.hero h1 {
+    font-family: "Sora", sans-serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    margin-bottom: 0.8rem;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.glass-card {
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: var(--card);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+    animation: reveal 0.8s ease;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #e2e8f0;
+}
+
+.form-control,
+.form-select {
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background-color: rgba(15, 23, 42, 0.6);
+    color: var(--text-main);
+}
+
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.65);
+}
+
+.btn-predict {
+    background: linear-gradient(135deg, var(--accent), #facc15);
+    border: none;
+    color: #111827;
+    border-radius: 0.8rem;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-predict:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(245, 158, 11, 0.35);
+    background: linear-gradient(135deg, #fbbf24, var(--accent-dark));
+}
+
+.result-panel {
+    border-radius: 1rem;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    animation: reveal 0.7s ease;
+}
+
+.result-panel h3 {
+    font-family: "Sora", sans-serif;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.dream-panel h3 {
+    color: var(--dream);
+}
+
+.moderate-panel h3 {
+    color: var(--moderate);
+}
+
+.safe-panel h3 {
+    color: var(--safe);
+}
+
+.college-card {
+    border-radius: 0.75rem;
+    padding: 0.85rem;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    transform: translateY(8px);
+    opacity: 0;
+    animation: riseIn 0.45s ease forwards;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.best-match-card {
+    border-color: rgba(245, 158, 11, 0.85);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(255, 255, 255, 0.08));
+    box-shadow: 0 14px 24px rgba(245, 158, 11, 0.2);
+}
+
+.best-match-card .college-name {
+    color: #fef3c7;
+}
+
+.college-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 24px rgba(0, 0, 0, 0.28);
+    border-color: rgba(245, 158, 11, 0.55);
+}
+
+.college-name {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.college-meta {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.status-card {
+    border-radius: 0.9rem;
+    padding: 0.85rem 1rem;
+}
+
+.best-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #111827;
+    background: linear-gradient(135deg, #fde047, #f59e0b);
+    border-radius: 999px;
+    padding: 0.2rem 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.compare-check {
+    accent-color: var(--accent);
+    width: 1rem;
+    height: 1rem;
+}
+
+#chartsSection,
+#comparisonSection,
+#compareToolbar {
+    animation: reveal 0.7s ease;
+}
+
+.table-dark th,
+.table-dark td {
+    vertical-align: middle;
+}
+
+@keyframes reveal {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes riseIn {
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-20px);
+    }
+}
+
+@media (max-width: 768px) {
+    .hero {
+        text-align: left;
+    }
+
+    .subtitle {
+        margin-left: 0;
+    }
+}

@@ -1,0 +1,47 @@
+# Java / Spring Boot
+target/
+*.log
+*.class
+
+# Maven
+.mvn/
+backend/target/
+backend/bin/
+*.jar
+*.war
+
+# Node / frontend (if any future use)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Env / secrets
+.env
+*.env
+
+# Build outputs
+dist/
+build/
+
+# Eclipse
+.classpath
+.project
+.settings/
+.factorypath
+
+# Tools/Build files
+backend/.tools/
+backend/compare_out.json
+backend/recommend_out.json
+backend/out/
+
+# Python cache
+__pycache__/
+*.pyc
