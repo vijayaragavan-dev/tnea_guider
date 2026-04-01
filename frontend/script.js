@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:8081";
+const BASE_URL = "http://localhost:8081/api";
 
 const predictorForm = document.getElementById("predictorForm");
 const cutoffInput = document.getElementById("cutoff");
@@ -25,6 +25,40 @@ const selectedCollegeIds = new Set();
 let placementChart;
 let tierChart;
 
+async function loadMasterData() {
+    try {
+        const response = await fetch(`${BASE_URL}/master-data`);
+        if (!response.ok) throw new Error("Failed to load master data");
+        
+        const data = await response.json();
+        
+        populateDropdown("district", data.districts, "Any District");
+        populateDropdown("branch", data.branches, "Choose branch");
+        populateDropdown("category", data.categories, "Choose category");
+        
+        console.log("Master data loaded:", data);
+    } catch (error) {
+        console.error("Failed to load master data:", error);
+    }
+}
+
+function populateDropdown(elementId, items, defaultText) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    select.innerHTML = `<option value="">${defaultText}</option>`;
+    
+    if (items && Array.isArray(items)) {
+        items.forEach(item => {
+            const option = document.createElement("option");
+            option.value = item;
+            option.textContent = item;
+            select.appendChild(option);
+        });
+    }
+}
+
+loadMasterData();
 checkBackendConnection();
 
 predictorForm.addEventListener("submit", async (event) => {
@@ -57,17 +91,19 @@ predictorForm.addEventListener("submit", async (event) => {
     hideResults();
     hideComparison();
 
+    const districtValue = districtInput.value ? districtInput.value.trim() : "";
+    
     const payload = {
         cutoff: Number(cutoffInput.value),
         category: categoryInput.value,
-        branch: normalizeOptional(branchInput.value),
+        branch: branchInput.value || null,
         budget: budgetRaw === "" ? null : Number(budgetRaw),
-        district: normalizeOptional(districtInput.value),
-        preference: normalizeOptional(preferenceInput.value)
+        district: districtValue === "" ? null : districtValue,
+        preference: preferenceInput.value || null
     };
 
     try {
-        const response = await fetch(`${BASE_URL}/api/recommend`, {
+        const response = await fetch(`${BASE_URL}/recommend`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -76,29 +112,53 @@ predictorForm.addEventListener("submit", async (event) => {
         });
 
         const data = await response.json();
+        
+        console.log("API Response:", data);
 
         if (!response.ok) {
-            if (response.status === 404) {
-                showStatus("No colleges found. Try increasing budget or removing filters.", "warning");
-            } else {
-                const message = data.message || "Failed to get recommendations.";
-                showStatus(message, "danger");
+            if (response.status === 404 || (data.dream?.length === 0 && data.moderate?.length === 0 && data.safe?.length === 0)) {
+                showEmptyResultsMessage();
+                return;
             }
+            showUserFriendlyError(data.message);
+            return;
+        }
+
+        if (!data || (!data.dream && !data.moderate && !data.safe)) {
+            showEmptyResultsMessage();
             return;
         }
 
         renderResults(data);
-        const total = data.dream.length + data.moderate.length + data.safe.length;
+        const total = (data.dream?.length || 0) + (data.moderate?.length || 0) + (data.safe?.length || 0);
         if (total === 0) {
-            showStatus("No colleges found. Try increasing budget or removing filters.", "warning");
+            showEmptyResultsMessage();
             return;
         }
         showStatus(`Found ${total} matching colleges.`, "success");
-        resultsSection.scrollIntoView({behavior: "smooth", block: "start"});
+        resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
+        console.error("API Error:", error);
         showBackendOfflineStatus();
     }
 });
+
+function showEmptyResultsMessage() {
+    statusArea.innerHTML = `
+        <div class="status-card alert alert-warning" role="alert">
+            <strong>No matching colleges found.</strong><br>
+            Try:<br>
+            &bull; Increasing cutoff range<br>
+            &bull; Changing district<br>
+            &bull; Removing filters<br>
+            &bull; Increasing budget
+        </div>
+    `;
+}
+
+function showUserFriendlyError(message) {
+    showStatus("Something went wrong. Please try again.", "danger");
+}
 
 resultsSection.addEventListener("change", (event) => {
     if (!event.target.classList.contains("compare-check")) {
@@ -133,31 +193,34 @@ compareButton.addEventListener("click", async () => {
     const ids = Array.from(selectedCollegeIds).join(",");
 
     try {
-        const response = await fetch(`${BASE_URL}/api/compare?ids=${encodeURIComponent(ids)}`);
+        const response = await fetch(`${BASE_URL}/compare?ids=${encodeURIComponent(ids)}`);
         const data = await response.json();
+        
+        console.log("Compare API Response:", data);
 
         if (!response.ok) {
-            showStatus(data.message || "Failed to compare colleges.", "danger");
+            showStatus("Failed to compare colleges. Please try again.", "danger");
             return;
         }
 
         renderComparisonTable(data);
         showStatus("Comparison loaded successfully.", "success");
     } catch (error) {
+        console.error("Compare API Error:", error);
         showBackendOfflineStatus();
     }
 });
 
 async function checkBackendConnection() {
     try {
-        await fetch(`${BASE_URL}/api/compare?ids=1`);
+        await fetch(`${BASE_URL}/compare?ids=1`);
     } catch (error) {
-        showStatus("Backend server is not running on port 8081", "warning");
+        showStatus("Unable to connect to server. Please ensure the backend is running.", "warning");
     }
 }
 
 function showBackendOfflineStatus() {
-    showStatus("Backend server is not running on port 8081", "danger");
+    showStatus("Something went wrong. Please try again.", "danger");
 }
 
 function isCutoffValid(rawValue) {
@@ -166,11 +229,6 @@ function isCutoffValid(rawValue) {
         return false;
     }
     return /^\d+(\.0|\.5)?$/.test(value) && Number(value) >= 0 && Number(value) <= 200;
-}
-
-function normalizeOptional(value) {
-    const text = String(value || "").trim();
-    return text === "" ? null : text;
 }
 
 function renderLoading() {
@@ -191,12 +249,16 @@ function clearStatus() {
 }
 
 function renderResults(data) {
-    const allColleges = [...data.dream, ...data.moderate, ...data.safe];
+    const dream = data.dream || [];
+    const moderate = data.moderate || [];
+    const safe = data.safe || [];
+    
+    const allColleges = [...dream, ...moderate, ...safe];
     const bestMatchId = resolveBestMatchId(allColleges);
 
-    renderList(dreamList, data.dream, bestMatchId);
-    renderList(moderateList, data.moderate, bestMatchId);
-    renderList(safeList, data.safe, bestMatchId);
+    renderList(dreamList, dream, bestMatchId);
+    renderList(moderateList, moderate, bestMatchId);
+    renderList(safeList, safe, bestMatchId);
 
     resultsSection.classList.remove("d-none");
     compareToolbar.classList.remove("d-none");

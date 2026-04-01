@@ -1,10 +1,11 @@
 package com.tneaguider.backend.entity;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -15,34 +16,28 @@ public class College {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
     private String branch;
 
-    @Column(nullable = false)
     private String category;
 
-    @Column(nullable = false)
-    private String district;
+    @ManyToOne
+    @JoinColumn(name = "district_id")
+    private District district;
 
-    @Column(nullable = false)
     private Double cutoff;
 
-    @Column(nullable = false)
     private Double fees;
 
-    @Column(name = "placement_rate", nullable = false)
     private Double placementRate;
 
-    @Column(nullable = false)
     private String tier;
 
     public College() {
     }
 
-    public College(Long id, String name, String branch, String category, String district, Double cutoff, Double fees,
+    public College(Long id, String name, String branch, String category, District district, Double cutoff, Double fees,
                    Double placementRate, String tier) {
         this.id = id;
         this.name = name;
@@ -87,12 +82,16 @@ public class College {
         this.category = category;
     }
 
-    public String getDistrict() {
+    public District getDistrict() {
         return district;
     }
 
-    public void setDistrict(String district) {
+    public void setDistrict(District district) {
         this.district = district;
+    }
+
+    public String getDistrictName() {
+        return district != null && district.getName() != null ? district.getName() : "Unknown";
     }
 
     public Double getCutoff() {

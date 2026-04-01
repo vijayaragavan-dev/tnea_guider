@@ -4,96 +4,293 @@ import com.tneaguider.backend.dto.RecommendationItemDto;
 import com.tneaguider.backend.dto.RecommendationRequestDto;
 import com.tneaguider.backend.dto.RecommendationResponseDto;
 import com.tneaguider.backend.entity.College;
+import com.tneaguider.backend.entity.District;
 import com.tneaguider.backend.entity.Recommendation;
 import com.tneaguider.backend.entity.Student;
-import com.tneaguider.backend.entity.Weight;
-import com.tneaguider.backend.exception.NoResultsFoundException;
 import com.tneaguider.backend.repository.CollegeRepository;
 import com.tneaguider.backend.repository.RecommendationRepository;
 import com.tneaguider.backend.repository.StudentRepository;
-import com.tneaguider.backend.repository.WeightRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 public class RecommendationService {
 
-    private static final double CUTOFF_WEIGHT = 0.4;
-    private static final double PLACEMENT_WEIGHT = 0.2;
-    private static final double TIER_WEIGHT = 0.2;
-    private static final double FEE_WEIGHT = 0.2;
+    private static final double MAX_FEES基准 = 150000;
+    private static final double CUTOFF_WEIGHT = 0.5;
+    private static final double PLACEMENT_WEIGHT = 0.3;
+    private static final double FEES_WEIGHT = 0.2;
+
+    private static final java.util.Map<String, String> DISTRICT_ALIASES;
+    private static final java.util.Map<String, String> BRANCH_ALIASES;
+    
+    static {
+        java.util.Map<String, String> districtMap = new java.util.HashMap<>();
+        districtMap.put("trichy", "Tiruchirappalli");
+        districtMap.put("tiruchirappalli", "Tiruchirappalli");
+        districtMap.put("chennai", "Chennai");
+        districtMap.put("coimbatore", "Coimbatore");
+        districtMap.put("madurai", "Madurai");
+        districtMap.put("salem", "Salem");
+        districtMap.put("vellore", "Vellore");
+        districtMap.put("tirunelveli", "Tirunelveli");
+        districtMap.put("tanjore", "Thanjavur");
+        districtMap.put("thanjavur", "Thanjavur");
+        districtMap.put("dindigul", "Dindigul");
+        districtMap.put("erode", "Erode");
+        districtMap.put("namakkal", "Namakkal");
+        districtMap.put("kanchipuram", "Kanchipuram");
+        districtMap.put("chengalpattu", "Chengalpattu");
+        districtMap.put("tiruvallur", "Tiruvallur");
+        DISTRICT_ALIASES = java.util.Collections.unmodifiableMap(districtMap);
+        
+        java.util.Map<String, String> branchMap = new java.util.HashMap<>();
+        branchMap.put("ai ds", "AI & DS");
+        branchMap.put("aids", "AI & DS");
+        branchMap.put("ai & ds", "AI & DS");
+        branchMap.put("ai ml", "AI & ML");
+        branchMap.put("aiml", "AI & ML");
+        branchMap.put("ai & ml", "AI & ML");
+        branchMap.put("cse", "CSE");
+        branchMap.put("it", "IT");
+        branchMap.put("ece", "ECE");
+        branchMap.put("eee", "EEE");
+        branchMap.put("mech", "MECH");
+        branchMap.put("civil", "CIVIL");
+        branchMap.put("computer science", "CSE");
+        branchMap.put("information technology", "IT");
+        branchMap.put("electronics", "ECE");
+        branchMap.put("electrical", "EEE");
+        branchMap.put("mechanical", "MECH");
+        BRANCH_ALIASES = java.util.Collections.unmodifiableMap(branchMap);
+    }
 
     private final CollegeRepository collegeRepository;
     private final StudentRepository studentRepository;
     private final RecommendationRepository recommendationRepository;
-    private final WeightRepository weightRepository;
 
     public RecommendationService(CollegeRepository collegeRepository,
-                                 StudentRepository studentRepository,
-                                 RecommendationRepository recommendationRepository,
-                                 WeightRepository weightRepository) {
+                                  StudentRepository studentRepository,
+                                  RecommendationRepository recommendationRepository) {
         this.collegeRepository = collegeRepository;
         this.studentRepository = studentRepository;
         this.recommendationRepository = recommendationRepository;
-        this.weightRepository = weightRepository;
     }
 
     @Transactional
     public RecommendationResponseDto generateRecommendations(RecommendationRequestDto request) {
-        double studentCutoff = request.getCutoff().doubleValue();
-        Double budget = request.getBudget() == null ? null : request.getBudget().doubleValue();
-        WeightProfile weightProfile = resolveWeightProfile(request.getPreference());
+        Double cutoffInput = request.getCutoff() != null ? request.getCutoff().doubleValue() : null;
+        String categoryInput = request.getCategory();
+        String branchInput = request.getBranch();
+        String districtInput = request.getDistrict();
+        Double budgetInput = request.getBudget() != null ? request.getBudget().doubleValue() : null;
+        String tierInput = request.getPreference() != null ? request.getPreference() : null;
 
-        Student savedStudent = saveStudentSnapshot(request, studentCutoff, budget);
+        double studentCutoff = cutoffInput != null ? cutoffInput : 190.0;
+        String normalizedCategory = normalize(categoryInput);
+        String normalizedBranch = resolveBranchAlias(normalize(branchInput));
+        String normalizedDistrict = resolveDistrictAlias(normalize(districtInput));
+        Double budget = budgetInput;
+        String normalizedTier = normalize(tierInput);
 
-        List<College> filteredColleges = filterColleges(
-                collegeRepository.findAll(),
-                request.getBranch(),
-                request.getCategory(),
-                budget,
-                request.getDistrict()
+        List<College> colleges = fetchWithFlexibleFilters(
+            studentCutoff, normalizedDistrict, normalizedTier, budget
         );
 
-        if (filteredColleges.isEmpty()) {
-            throw new NoResultsFoundException("No colleges found for the selected criteria.");
+        if (colleges.isEmpty()) {
+            colleges = relaxAndFetch(studentCutoff);
         }
 
-        double maxFees = filteredColleges.stream()
-                .map(College::getFees)
-                .filter(Objects::nonNull)
-                .max(Double::compareTo)
-                .orElse(1.0);
+        if (colleges.isEmpty()) {
+            colleges = fetchAllCollegesFallback();
+        }
+
+        if (colleges.isEmpty()) {
+            throw new RuntimeException("No colleges found in database");
+        }
+
+        List<ScoredCollege> scoredList = colleges.stream()
+            .map(college -> {
+                double score = calculateSmartScore(studentCutoff, college, normalizedBranch, normalizedDistrict, budget);
+                String classification = classifyCollege(studentCutoff, college.getCutoff());
+                return new ScoredCollege(college, score, classification);
+            })
+            .sorted((a, b) -> Double.compare(b.score, a.score))
+            .collect(Collectors.toList());
+
+        List<ScoredCollege> dreamList = scoredList.stream()
+            .filter(s -> "DREAM".equals(s.classification))
+            .collect(Collectors.toList());
+        List<ScoredCollege> moderateList = scoredList.stream()
+            .filter(s -> "MODERATE".equals(s.classification))
+            .collect(Collectors.toList());
+        List<ScoredCollege> safeList = scoredList.stream()
+            .filter(s -> "SAFE".equals(s.classification))
+            .collect(Collectors.toList());
+
+        if (dreamList.isEmpty() && !scoredList.isEmpty()) {
+            int top30 = (int) (scoredList.size() * 0.3);
+            dreamList = scoredList.subList(0, Math.min(top30, scoredList.size()));
+            safeList = scoredList.subList(dreamList.size(), scoredList.size());
+        }
 
         RecommendationResponseDto response = new RecommendationResponseDto();
+        Student student = saveStudent(request, studentCutoff, normalizedCategory, normalizedBranch, normalizedDistrict, budget);
         List<Recommendation> recordsToPersist = new ArrayList<>();
 
-        for (College college : filteredColleges) {
-            double score = calculateFinalScore(studentCutoff, college, maxFees, weightProfile);
-            String classification = classify(studentCutoff, college.getCutoff());
-            RecommendationItemDto item = mapToItemDto(college, score);
-
-            addToBucket(response, classification, item);
-            recordsToPersist.add(buildRecommendationEntity(savedStudent, college, score, classification));
+        for (ScoredCollege sc : scoredList) {
+            RecommendationItemDto item = mapToDto(sc.college, sc.score, sc.classification);
+            switch (sc.classification) {
+                case "DREAM" -> response.getDream().add(item);
+                case "MODERATE" -> response.getModerate().add(item);
+                case "SAFE" -> response.getSafe().add(item);
+            }
+            Recommendation rec = buildRecommendation(student, sc.college, (int) sc.score, sc.classification);
+            recordsToPersist.add(rec);
         }
 
-        sortBuckets(response);
+        trimResults(response);
         recommendationRepository.saveAll(recordsToPersist);
-        ensureHasAtLeastOneResult(response);
 
         return response;
+    }
+
+    private List<College> fetchWithFlexibleFilters(Double cutoff, String district, String tier, Double maxFees) {
+        Double effectiveMaxFees = maxFees != null ? maxFees : null;
+        
+        if (district == null && tier == null && maxFees == null) {
+            return fetchCollegesBasic(cutoff);
+        }
+
+        List<Object[]> results = collegeRepository.findWithFilters(
+            cutoff,
+            district,
+            tier,
+            effectiveMaxFees
+        );
+
+        return mapToColleges(results);
+    }
+
+    private List<College> fetchCollegesBasic(Double cutoff) {
+        if (cutoff != null) {
+            List<Object[]> results = collegeRepository.findAllWithDetailsByCutoff(cutoff);
+            return mapToColleges(results);
+        }
+        List<Object[]> results = collegeRepository.findAllWithDetails();
+        return mapToColleges(results);
+    }
+
+    private List<College> relaxAndFetch(double cutoff) {
+        double relaxedCutoff = cutoff + 10;
+        List<Object[]> results = collegeRepository.findAllWithDetailsByCutoff(relaxedCutoff);
+        return mapToColleges(results);
+    }
+
+    private List<College> fetchAllCollegesFallback() {
+        List<Object[]> results = collegeRepository.findAllWithDetails();
+        return mapToColleges(results);
+    }
+
+    private List<College> mapToColleges(List<Object[]> results) {
+        List<College> colleges = new ArrayList<>();
+        for (Object[] row : results) {
+            College college = new College();
+            college.setId(((Number) row[0]).longValue());
+            college.setName((String) row[1]);
+            college.setBranch((String) row[2]);
+            college.setCategory((String) row[3]);
+            
+            District district = new District();
+            district.setName((String) row[4]);
+            college.setDistrict(district);
+            
+            college.setCutoff(toDouble(row[5]));
+            college.setFees(toDouble(row[6]));
+            college.setPlacementRate(toDouble(row[7]));
+            college.setTier((String) row[8]);
+            colleges.add(college);
+        }
+        return colleges;
+    }
+
+    private Double toDouble(Object obj) {
+        if (obj == null) return 0.0;
+        if (obj instanceof Number) return ((Number) obj).doubleValue();
+        return Double.parseDouble(obj.toString());
+    }
+
+    private double calculateSmartScore(double studentCutoff, College college, String targetBranch, 
+                                       String targetDistrict, Double budget) {
+        double cutoff = college.getCutoff() != null ? college.getCutoff() : 0;
+        double placement = college.getPlacementRate() != null ? college.getPlacementRate() : 0;
+        double fees = college.getFees() != null ? college.getFees() : MAX_FEES基准;
+
+        double normalizedCutoff = (cutoff / 200.0) * 100;
+        double normalizedPlacement = placement;
+        double normalizedFees = ((MAX_FEES基准 - fees) / MAX_FEES基准) * 100;
+
+        double score = (normalizedCutoff * CUTOFF_WEIGHT) + 
+                       (normalizedPlacement * PLACEMENT_WEIGHT) + 
+                       (normalizedFees * FEES_WEIGHT);
+
+        if (targetBranch != null && college.getBranch() != null) {
+            if (targetBranch.equalsIgnoreCase(college.getBranch())) {
+                score += 15;
+            }
+        }
+
+        if (targetDistrict != null && college.getDistrictName() != null) {
+            if (targetDistrict.equalsIgnoreCase(college.getDistrictName())) {
+                score += 20;
+            }
+        }
+
+        if (budget != null && fees <= budget) {
+            score += 10;
+        }
+
+        if ("Tier 1".equalsIgnoreCase(college.getTier())) {
+            score += 10;
+        } else if ("Tier 2".equalsIgnoreCase(college.getTier())) {
+            score += 5;
+        }
+
+        return score;
+    }
+
+    private String classifyCollege(double studentCutoff, Double collegeCutoff) {
+        if (collegeCutoff == null) return "SAFE";
+        
+        if (collegeCutoff >= studentCutoff) {
+            return "DREAM";
+        } else if (collegeCutoff >= studentCutoff - 5) {
+            return "MODERATE";
+        } else {
+            return "SAFE";
+        }
+    }
+
+    private void trimResults(RecommendationResponseDto response) {
+        int maxPerCategory = 15;
+        
+        if (response.getDream().size() > maxPerCategory) {
+            response.getDream().subList(maxPerCategory, response.getDream().size()).clear();
+        }
+        if (response.getModerate().size() > maxPerCategory) {
+            response.getModerate().subList(maxPerCategory, response.getModerate().size()).clear();
+        }
+        if (response.getSafe().size() > maxPerCategory) {
+            response.getSafe().subList(maxPerCategory, response.getSafe().size()).clear();
+        }
     }
 
     public List<RecommendationItemDto> compareColleges(List<Long> ids) {
@@ -101,247 +298,97 @@ public class RecommendationService {
             throw new IllegalArgumentException("At least one college id is required for comparison.");
         }
 
-        LinkedHashSet<Long> uniqueValidIds = new LinkedHashSet<>();
-        for (Long id : ids) {
-            if (id == null) {
-                continue;
-            }
-            if (id <= 0) {
-                throw new IllegalArgumentException("College ids must be positive numbers.");
-            }
-            uniqueValidIds.add(id);
-        }
+        List<Long> uniqueValidIds = ids.stream()
+            .filter(id -> id != null && id > 0)
+            .distinct()
+            .collect(Collectors.toList());
 
         if (uniqueValidIds.isEmpty()) {
-            throw new IllegalArgumentException("At least one college id is required for comparison.");
+            throw new IllegalArgumentException("At least one college id is required.");
         }
 
         if (uniqueValidIds.size() > 3) {
             throw new IllegalArgumentException("You can compare maximum 3 colleges.");
         }
 
-        List<Long> normalizedIds = new ArrayList<>(uniqueValidIds);
-
-        List<College> colleges = collegeRepository.findAllById(normalizedIds);
-        if (colleges.isEmpty()) {
-            throw new NoResultsFoundException("No colleges found for the provided ids.");
+        List<College> colleges = collegeRepository.findAllById(uniqueValidIds);
+        
+        List<RecommendationItemDto> result = new ArrayList<>();
+        for (Long id : uniqueValidIds) {
+            colleges.stream()
+                .filter(c -> c.getId().equals(id))
+                .findFirst()
+                .ifPresent(college -> result.add(mapToDto(college, null, null)));
         }
 
-        Map<Long, College> byId = new HashMap<>();
-        for (College college : colleges) {
-            byId.put(college.getId(), college);
-        }
-
-        List<RecommendationItemDto> response = new ArrayList<>();
-        for (Long id : normalizedIds) {
-            College college = byId.get(id);
-            if (college == null) {
-                continue;
-            }
-
-            RecommendationItemDto dto = new RecommendationItemDto();
-            dto.setCollegeId(college.getId());
-            dto.setCollegeName(college.getName());
-            dto.setDistrict(college.getDistrict());
-            dto.setCutoff(college.getCutoff());
-            dto.setFees(college.getFees());
-            dto.setPlacementRate(college.getPlacementRate());
-            dto.setTier(college.getTier());
-            dto.setFinalScore(null);
-            response.add(dto);
-        }
-
-        if (response.isEmpty()) {
-            throw new NoResultsFoundException("No colleges found for the provided ids.");
-        }
-
-        return response;
+        return result;
     }
 
-    private Student saveStudentSnapshot(RecommendationRequestDto request, double studentCutoff, Double budget) {
+    private Student saveStudent(RecommendationRequestDto request, double cutoff, String category, 
+                                String branch, String district, Double budget) {
         Student student = new Student();
-        student.setCutoff(studentCutoff);
-        student.setCategory(request.getCategory().trim().toUpperCase(Locale.ROOT));
-        String normalizedBranch = normalizeOptionalText(request.getBranch());
-        student.setBranch(normalizedBranch == null ? "ANY" : normalizedBranch.toUpperCase(Locale.ROOT));
-        student.setBudget(budget == null ? 0.0 : budget);
-        student.setDistrict(normalizeDistrict(request.getDistrict()));
+        student.setCutoff(cutoff);
+        student.setCategory(category != null ? category : "BC");
+        student.setBranch(branch != null ? branch : "ANY");
+        student.setDistrict(district);
+        student.setBudget(budget != null ? budget : 0.0);
         student.setCreatedAt(LocalDateTime.now());
         return studentRepository.save(student);
     }
 
-    private List<College> filterColleges(List<College> colleges,
-                                         String branch,
-                                         String category,
-                                         Double budget,
-                                         String district) {
-        String normalizedBranch = normalizeOptionalText(branch);
-        String normalizedCategory = category.trim();
-        String normalizedDistrict = normalizeOptionalText(district);
-        boolean hasBudgetFilter = budget != null && budget > 0;
-
-        return colleges.stream()
-                .filter(c -> c.getCategory() != null && c.getCategory().equalsIgnoreCase(normalizedCategory))
-                .filter(c -> normalizedBranch == null
-                        || (c.getBranch() != null && c.getBranch().equalsIgnoreCase(normalizedBranch)))
-                .filter(c -> !hasBudgetFilter
-                        || (c.getFees() != null && c.getFees() <= budget))
-                .filter(c -> normalizedDistrict == null
-                        || (c.getDistrict() != null && normalizedDistrict.equalsIgnoreCase(c.getDistrict().trim())))
-                .collect(Collectors.toList());
-    }
-
-    private String normalizeOptionalText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private String normalizeDistrict(String district) {
-        String normalized = normalizeOptionalText(district);
-        return normalized == null ? null : normalized;
-    }
-
-    private double calculateFinalScore(double studentCutoff, College college, double maxFees, WeightProfile profile) {
-        double collegeCutoff = Optional.ofNullable(college.getCutoff()).orElse(0.0);
-        double placementRate = Optional.ofNullable(college.getPlacementRate()).orElse(0.0);
-        double tierWeight = resolveTierWeight(college.getTier());
-        double fees = Optional.ofNullable(college.getFees()).orElse(maxFees);
-
-        double cutoffScore = collegeCutoff <= 0 ? 0 : studentCutoff / collegeCutoff;
-        double feeScore = maxFees <= 0 ? 0 : (1 - (fees / maxFees));
-
-        return (profile.cutoffWeight * cutoffScore)
-                + (profile.placementWeight * (placementRate / 100.0))
-                + (profile.tierWeight * tierWeight)
-                + (profile.feeWeight * feeScore);
-    }
-
-    private WeightProfile resolveWeightProfile(String preference) {
-        if (preference == null || preference.isBlank()) {
-            return new WeightProfile(CUTOFF_WEIGHT, PLACEMENT_WEIGHT, TIER_WEIGHT, FEE_WEIGHT);
-        }
-
-        String normalized = preference.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "high placement", "placement" -> normalizeWeights(0.3, 0.4, 0.2, 0.1);
-            case "low fees", "fees" -> normalizeWeights(0.3, 0.15, 0.15, 0.4);
-            case "top tier", "tier" -> normalizeWeights(0.3, 0.15, 0.4, 0.15);
-            default -> new WeightProfile(CUTOFF_WEIGHT, PLACEMENT_WEIGHT, TIER_WEIGHT, FEE_WEIGHT);
-        };
-    }
-
-    private WeightProfile normalizeWeights(double cutoffWeight,
-                                           double placementWeight,
-                                           double tierWeight,
-                                           double feeWeight) {
-        List<Double> raw = Arrays.asList(cutoffWeight, placementWeight, tierWeight, feeWeight);
-        double safeSum = raw.stream().mapToDouble(v -> Math.max(0.0, v)).sum();
-        if (safeSum <= 0) {
-            return new WeightProfile(CUTOFF_WEIGHT, PLACEMENT_WEIGHT, TIER_WEIGHT, FEE_WEIGHT);
-        }
-
-        return new WeightProfile(
-                Math.max(0.0, cutoffWeight) / safeSum,
-                Math.max(0.0, placementWeight) / safeSum,
-                Math.max(0.0, tierWeight) / safeSum,
-                Math.max(0.0, feeWeight) / safeSum
-        );
-    }
-
-    private double resolveTierWeight(String tier) {
-        if (tier == null || tier.isBlank()) {
-            return 0.5;
-        }
-
-        Map<String, Double> defaultWeights = Map.of(
-                "TIER 1", 1.0,
-                "TIER 2", 0.7,
-                "TIER 3", 0.5
-        );
-
-        String normalizedKey = tier.trim().toUpperCase(Locale.ROOT);
-        Optional<Weight> configuredWeight = weightRepository.findByWeightKeyIgnoreCase(normalizedKey);
-        if (configuredWeight.isPresent()) {
-            return configuredWeight.get().getWeightValue();
-        }
-
-        return defaultWeights.getOrDefault(normalizedKey, 0.5);
-    }
-
-    private String classify(double studentCutoff, Double collegeCutoffValue) {
-        double collegeCutoff = Optional.ofNullable(collegeCutoffValue).orElse(0.0);
-
-        if (collegeCutoff >= studentCutoff) {
-            return "DREAM";
-        }
-        if (Math.abs(studentCutoff - collegeCutoff) <= 5.0) {
-            return "MODERATE";
-        }
-        return "SAFE";
-    }
-
-    private RecommendationItemDto mapToItemDto(College college, double score) {
+    private RecommendationItemDto mapToDto(College college, Double score, String classification) {
         RecommendationItemDto dto = new RecommendationItemDto();
         dto.setCollegeId(college.getId());
         dto.setCollegeName(college.getName());
-        dto.setDistrict(college.getDistrict());
+        dto.setDistrict(college.getDistrictName());
         dto.setCutoff(college.getCutoff());
         dto.setFees(college.getFees());
         dto.setPlacementRate(college.getPlacementRate());
         dto.setTier(college.getTier());
-        dto.setFinalScore(round(score));
+        dto.setFinalScore(score != null ? score : 0.0);
         return dto;
     }
 
-    private Recommendation buildRecommendationEntity(Student student, College college, double score, String classification) {
-        Recommendation recommendation = new Recommendation();
-        recommendation.setStudent(student);
-        recommendation.setCollege(college);
-        recommendation.setFinalScore(round(score));
-        recommendation.setClassification(classification);
-        recommendation.setCreatedAt(LocalDateTime.now());
-        return recommendation;
+    private Recommendation buildRecommendation(Student student, College college, int score, String classification) {
+        Recommendation rec = new Recommendation();
+        rec.setStudent(student);
+        rec.setCollege(college);
+        rec.setFinalScore((double) score);
+        rec.setClassification(classification);
+        rec.setCreatedAt(LocalDateTime.now());
+        return rec;
     }
 
-    private void addToBucket(RecommendationResponseDto response, String classification, RecommendationItemDto item) {
-        switch (classification) {
-            case "DREAM" -> response.getDream().add(item);
-            case "MODERATE" -> response.getModerate().add(item);
-            default -> response.getSafe().add(item);
+    private String normalize(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
         }
+        return value.trim();
     }
 
-    private void sortBuckets(RecommendationResponseDto response) {
-        Comparator<RecommendationItemDto> byScoreDesc = Comparator.comparing(RecommendationItemDto::getFinalScore).reversed();
-        response.getDream().sort(byScoreDesc);
-        response.getModerate().sort(byScoreDesc);
-        response.getSafe().sort(byScoreDesc);
+    private String resolveDistrictAlias(String district) {
+        if (district == null) return null;
+        String lower = district.toLowerCase().trim();
+        String resolved = DISTRICT_ALIASES.get(lower);
+        return resolved != null ? resolved : district;
     }
 
-    private void ensureHasAtLeastOneResult(RecommendationResponseDto response) {
-        if (response.getDream().isEmpty() && response.getModerate().isEmpty() && response.getSafe().isEmpty()) {
-            throw new NoResultsFoundException("No recommendations available for the selected inputs.");
-        }
+    private String resolveBranchAlias(String branch) {
+        if (branch == null) return null;
+        String lower = branch.toLowerCase().trim();
+        String resolved = BRANCH_ALIASES.get(lower);
+        return resolved != null ? resolved : branch;
     }
 
-    private double round(double value) {
-        return Math.round(value * 10000.0) / 10000.0;
-    }
+    private static class ScoredCollege {
+        final College college;
+        final double score;
+        final String classification;
 
-    private static class WeightProfile {
-        private final double cutoffWeight;
-        private final double placementWeight;
-        private final double tierWeight;
-        private final double feeWeight;
-
-        private WeightProfile(double cutoffWeight, double placementWeight, double tierWeight, double feeWeight) {
-            this.cutoffWeight = cutoffWeight;
-            this.placementWeight = placementWeight;
-            this.tierWeight = tierWeight;
-            this.feeWeight = feeWeight;
+        ScoredCollege(College college, double score, String classification) {
+            this.college = college;
+            this.score = score;
+            this.classification = classification;
         }
     }
 }
