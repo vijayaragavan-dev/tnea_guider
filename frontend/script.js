@@ -146,12 +146,9 @@ predictorForm.addEventListener("submit", async (event) => {
 function showEmptyResultsMessage() {
     statusArea.innerHTML = `
         <div class="status-card alert alert-warning" role="alert">
-            <strong>No matching colleges found.</strong><br>
-            Try:<br>
-            &bull; Increasing cutoff range<br>
-            &bull; Changing district<br>
-            &bull; Removing filters<br>
-            &bull; Increasing budget
+            <strong>⚠ No exact match found.</strong><br>
+            Showing closest colleges based on your profile.<br>
+            <small>Try adjusting cutoff range, district, or budget filters.</small>
         </div>
     `;
 }
@@ -171,11 +168,6 @@ resultsSection.addEventListener("change", (event) => {
     }
 
     if (event.target.checked) {
-        if (selectedCollegeIds.size >= 3) {
-            event.target.checked = false;
-            showStatus("You can compare maximum 3 colleges", "warning");
-            return;
-        }
         selectedCollegeIds.add(id);
     } else {
         selectedCollegeIds.delete(id);
@@ -183,32 +175,29 @@ resultsSection.addEventListener("change", (event) => {
     updateCompareButton();
 });
 
-compareButton.addEventListener("click", async () => {
+compareButton.addEventListener("click", function() {
+    console.log("Compare button clicked");
+    console.log("Selected IDs:", Array.from(selectedCollegeIds));
+    console.log("Current colleges:", currentColleges);
+    
     if (selectedCollegeIds.size < 2) {
+        console.log("Less than 2 selected");
         showStatus("Select at least 2 colleges to compare.", "warning");
+        alert("Please select at least 2 colleges to compare");
         return;
     }
 
-    showStatus("Loading comparison...", "info");
-    const ids = Array.from(selectedCollegeIds).join(",");
-
-    try {
-        const response = await fetch(`${BASE_URL}/compare?ids=${encodeURIComponent(ids)}`);
-        const data = await response.json();
-        
-        console.log("Compare API Response:", data);
-
-        if (!response.ok) {
-            showStatus("Failed to compare colleges. Please try again.", "danger");
-            return;
-        }
-
-        renderComparisonTable(data);
-        showStatus("Comparison loaded successfully.", "success");
-    } catch (error) {
-        console.error("Compare API Error:", error);
-        showBackendOfflineStatus();
+    const selectedColleges = currentColleges.filter(c => selectedCollegeIds.has(c.collegeId));
+    console.log("Filtered colleges:", selectedColleges);
+    
+    if (selectedColleges.length < 2) {
+        showStatus("Select at least 2 colleges to compare.", "warning");
+        alert("Please select at least 2 colleges to compare");
+        return;
     }
+
+    console.log("Opening comparison modal with:", selectedColleges.length, "colleges");
+    openComparisonModal(selectedColleges);
 });
 
 async function checkBackendConnection() {
@@ -235,7 +224,7 @@ function renderLoading() {
     statusArea.innerHTML = `
         <div class="status-card alert alert-info d-flex align-items-center gap-2" role="alert">
             <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-            <span>Analyzing colleges and scoring options...</span>
+            <span>🔍 Analyzing best colleges for you...</span>
         </div>
     `;
 }
@@ -248,21 +237,23 @@ function clearStatus() {
     statusArea.innerHTML = "";
 }
 
+let currentColleges = [];
+
 function renderResults(data) {
     const dream = data.dream || [];
     const moderate = data.moderate || [];
     const safe = data.safe || [];
     
-    const allColleges = [...dream, ...moderate, ...safe];
-    const bestMatchId = resolveBestMatchId(allColleges);
+    currentColleges = [...dream, ...moderate, ...safe];
+    const bestMatchId = resolveBestMatchId(currentColleges);
 
-    renderList(dreamList, dream, bestMatchId);
-    renderList(moderateList, moderate, bestMatchId);
-    renderList(safeList, safe, bestMatchId);
+    renderList(dreamList, dream, bestMatchId, "dream");
+    renderList(moderateList, moderate, bestMatchId, "moderate");
+    renderList(safeList, safe, bestMatchId, "safe");
 
     resultsSection.classList.remove("d-none");
     compareToolbar.classList.remove("d-none");
-    renderCharts(allColleges);
+    renderCharts(currentColleges);
 }
 
 function hideResults() {
@@ -282,20 +273,37 @@ function hideComparison() {
     comparisonBody.innerHTML = "";
 }
 
-function renderList(container, colleges, bestMatchId) {
+function renderList(container, colleges, bestMatchId, categoryType) {
     if (!colleges || colleges.length === 0) {
         container.innerHTML = `<p class="text-secondary mb-0">No colleges in this category.</p>`;
         return;
     }
 
-    container.innerHTML = colleges.map((college, index) => `
+    const seen = new Set();
+    const uniqueColleges = [];
+    for (const college of colleges) {
+        if (!seen.has(college.collegeId)) {
+            seen.add(college.collegeId);
+            uniqueColleges.push(college);
+        }
+    }
+
+    const limitedColleges = uniqueColleges.slice(0, 10);
+    
+    container.innerHTML = limitedColleges.map((college, index) => `
         <article class="college-card ${college.collegeId === bestMatchId ? "best-match-card" : ""}" style="animation-delay:${index * 0.05}s">
             ${college.collegeId === bestMatchId ? '<span class="best-badge">Best Match</span>' : ''}
+            <span class="category-tag category-${categoryType}">${categoryType}</span>
             <div class="college-name">${escapeHtml(college.collegeName)}</div>
             <div class="college-meta">Cutoff: ${formatNumber(college.cutoff)}</div>
             <div class="college-meta">Fees: Rs ${formatNumber(college.fees)}</div>
             <div class="college-meta">Placement: ${formatNumber(college.placementRate)}%</div>
-            <div class="college-meta">District: ${escapeHtml(college.district || "N/A")}</div>
+            <div class="college-meta">District: ${escapeHtml(college.district || "Not specified")}</div>
+            <div class="college-actions mt-2">
+                <button class="btn btn-sm btn-action" onclick="showReview('${escapeHtml(college.collegeName)}', ${college.cutoff}, ${college.placementRate}, ${college.fees}, '${escapeHtml(college.district || '')}')">View Review</button>
+                <button class="btn btn-sm btn-action" onclick="showLocation('${escapeHtml(college.collegeName)}', '${escapeHtml(college.district || '')}')">📍 View Location</button>
+                <button class="btn btn-sm btn-action-why" onclick="showWhy('${escapeHtml(college.collegeName)}')">Why this college?</button>
+            </div>
             <label class="college-meta mt-2 d-flex align-items-center gap-2">
                 <input type="checkbox" class="compare-check" data-id="${college.collegeId}">
                 Compare this college
@@ -330,12 +338,12 @@ function renderComparisonTable(colleges) {
 
     comparisonBody.innerHTML = colleges.map((college) => `
         <tr>
-            <td>${escapeHtml(college.collegeName || "N/A")}</td>
-            <td>${escapeHtml(college.tier || "N/A")}</td>
+            <td>${escapeHtml(college.collegeName || "Unknown College")}</td>
+            <td>${escapeHtml(college.tier || "Standard")}</td>
             <td>${formatNumber(college.cutoff)}</td>
             <td>Rs ${formatNumber(college.fees)}</td>
             <td>${formatNumber(college.placementRate)}%</td>
-            <td>${escapeHtml(college.district || "N/A")}</td>
+            <td>${escapeHtml(college.district || "Not specified")}</td>
         </tr>
     `).join("");
 
@@ -429,7 +437,7 @@ function truncate(value, maxLength) {
 
 function formatNumber(value) {
     if (value === null || value === undefined || Number.isNaN(Number(value))) {
-        return "N/A";
+        return "Not specified";
     }
     return Number(value).toLocaleString("en-IN", {maximumFractionDigits: 2});
 }
@@ -442,3 +450,242 @@ function escapeHtml(text) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
+function showReview(collegeName, cutoff, placement, fees, district) {
+    console.log("showReview called with:", collegeName, district);
+    openModal("Student Reviews", '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading student reviews...</p></div>');
+    
+    let url = `${BASE_URL}/review?collegeName=${encodeURIComponent(collegeName)}`;
+    if (district && district.trim()) url += `&district=${encodeURIComponent(district.trim())}`;
+    console.log("Fetching URL:", url);
+    
+    fetch(url)
+        .then(response => {
+            console.log("Response status:", response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log("API Response data:", JSON.stringify(data));
+            const reviews = data.reviews || [];
+            console.log("Reviews array:", reviews.length);
+            
+            if (reviews.length === 0) {
+                document.getElementById("modalContent").innerHTML = '<p class="text-warning">No reviews available. Please try again later.</p>';
+                return;
+            }
+            
+            const totalReviews = reviews.length;
+            const displayReviews = reviews.slice(0, 2);
+            const hasMore = totalReviews > 2;
+            
+            let reviewsHtml = displayReviews.map(r => {
+                const stars = '⭐'.repeat(parseInt(r.rating) || 3);
+                return `<div class="review-card">
+                    <div class="review-header">
+                        <span class="review-stars">${stars}</span>
+                        <span class="review-name">${escapeHtml(r.name)}</span>
+                    </div>
+                    <div class="review-text">"${escapeHtml(r.review)}"</div>
+                </div>`;
+            }).join('');
+            
+            let readMoreBtn = '';
+            if (hasMore) {
+                const remainingReviews = reviews.slice(2);
+                readMoreBtn = `<div class="more-reviews" id="moreReviews" style="display:none;">
+                    ${remainingReviews.map(r => {
+                        const stars = '⭐'.repeat(parseInt(r.rating) || 3);
+                        return `<div class="review-card">
+                            <div class="review-header">
+                                <span class="review-stars">${stars}</span>
+                                <span class="review-name">${escapeHtml(r.name)}</span>
+                            </div>
+                            <div class="review-text">"${escapeHtml(r.review)}"</div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <button class="read-more-btn" onclick="toggleMoreReviews()">Read More Reviews (${totalReviews - 2} more)</button>`;
+            }
+            
+            const content = `<div class="reviews-container">
+                <div class="reviews-header">
+                    <span class="reviews-icon">💬</span>
+                    <h4>${escapeHtml(data.college)}</h4>
+                    <span class="reviews-count">${totalReviews} reviews</span>
+                </div>
+                <div class="reviews-list">${reviewsHtml}${readMoreBtn}</div>
+            </div>`;
+            document.getElementById("modalContent").innerHTML = content;
+        })
+        .catch(error => {
+            console.error("Review error:", error);
+            document.getElementById("modalContent").innerHTML = '<p class="text-danger">Failed to load reviews. Please try again.</p>';
+        });
+}
+
+function toggleMoreReviews() {
+    const moreSection = document.getElementById("moreReviews");
+    const btn = document.querySelector(".read-more-btn");
+    if (moreSection.style.display === "none") {
+        moreSection.style.display = "block";
+        btn.textContent = "Show Less";
+    } else {
+        moreSection.style.display = "none";
+        const total = document.querySelectorAll(".review-card").length;
+        btn.textContent = `Read More Reviews (${total - 2} more)`;
+    }
+}
+
+function showWhy(collegeName) {
+    const cutoff = cutoffInput.value || "";
+    const category = categoryInput.value || "";
+    
+    openModal("Why This College?", '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Analyzing suitability...</p></div>');
+    
+    fetch(`${BASE_URL}/why?collegeName=${encodeURIComponent(collegeName)}&cutoff=${encodeURIComponent(cutoff)}&category=${encodeURIComponent(category)}`)
+        .then(response => response.json())
+        .then(data => {
+            const content = `<div class="review-box ai-review">
+                <div class="ai-review-header">
+                    <span class="ai-icon">⭐</span>
+                    <h4>Why This College?</h4>
+                </div>
+                <div class="ai-review-college">${escapeHtml(data.college)}</div>
+                <div class="ai-review-text">${escapeHtml(data.reason).replace(/\n/g, '<br>')}</div>
+            </div>`;
+            document.getElementById("modalContent").innerHTML = content;
+        })
+        .catch(error => {
+            console.error("Why error:", error);
+            document.getElementById("modalContent").innerHTML = '<p class="text-danger">Unable to load explanation. Please try again.</p>';
+        });
+}
+
+function showLocation(collegeName, district) {
+    try {
+        let query;
+        if (district && district !== "Not specified") {
+            query = collegeName + " " + district + " Tamil Nadu";
+        } else {
+            query = collegeName + " Tamil Nadu";
+        }
+        const url = "https://www.google.com/maps/search/" + encodeURIComponent(query);
+        window.open(url, "_blank");
+    } catch (error) {
+        console.error("Location Error:", error);
+        alert("Unable to open location. Please try again.");
+    }
+}
+
+function openComparisonModal(colleges) {
+    console.log("openComparisonModal called with:", colleges);
+    
+    if (!colleges || colleges.length < 2) {
+        console.log("Validation failed: less than 2 colleges");
+        showStatus("Select at least 2 colleges to compare.", "warning");
+        return;
+    }
+
+    console.log("Building comparison for", colleges.length, "colleges");
+
+    const bestPlacement = Math.max(...colleges.map(c => Number(c.placementRate) || 0));
+    const lowestFees = Math.min(...colleges.map(c => Number(c.fees) || Infinity));
+    const lowestCutoff = Math.min(...colleges.map(c => Number(c.cutoff) || Infinity));
+
+    console.log("Best values - Placement:", bestPlacement, "Fees:", lowestFees, "Cutoff:", lowestCutoff);
+
+    const badgeCell = (value, isBest, type) => {
+        if (!isBest) return escapeHtml(value);
+        const badgeClass = type === 'placement' ? 'badge-best-placement' : type === 'fees' ? 'badge-best-fees' : 'badge-best-cutoff';
+        return `<span class="comparison-badge ${badgeClass}">${escapeHtml(value)}</span>`;
+    };
+
+    const thead = `<thead><tr><th class="attr-col sticky-col">Attribute</th>${colleges.map((c, i) => `<th class="college-header">${escapeHtml(c.collegeName)}</th>`).join('')}</tr></thead>`;
+    
+    const rows = [
+        { label: 'District', key: 'district', type: 'text' },
+        { label: 'Cutoff', key: 'cutoff', type: 'number', isBest: true, bestFor: 'lowest' },
+        { label: 'Fees (INR)', key: 'fees', type: 'number', isBest: true, bestFor: 'lowest' },
+        { label: 'Placement %', key: 'placementRate', type: 'number', isBest: true, bestFor: 'highest' },
+        { label: 'Tier', key: 'tier', type: 'text' }
+    ];
+
+    const tbody = `<tbody>${rows.map(row => {
+        let bestValue = row.isBest ? (row.bestFor === 'highest' ? bestPlacement : lowestCutoff || lowestFees) : null;
+        return `<tr>
+            <td class="attr-label sticky-col">${row.label}</td>
+            ${colleges.map(c => {
+                const value = c[row.key];
+                const numValue = Number(value) || 0;
+                const isBest = row.isBest && numValue === bestValue;
+                if (row.type === 'number') {
+                    return `<td>${badgeCell(row.key === 'fees' ? 'Rs ' + formatNumber(value) : formatNumber(value), isBest, row.key === 'placementRate' ? 'placement' : row.key === 'fees' ? 'fees' : 'cutoff')}</td>`;
+                }
+                return `<td>${escapeHtml(value || 'Not specified')}</td>`;
+            }).join('')}
+        </tr>`;
+    }).join('')}</tbody>`;
+
+    const tableHtml = `<div class="comparison-table-wrapper"><table class="comparison-table">${thead}${tbody}</table></div>`;
+    
+    const summaryHtml = `<div class="comparison-summary">
+        <h4>Quick Summary</h4>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <span class="summary-label">Highest Placement</span>
+                <span class="summary-value badge-best-placement">${colleges.find(c => Number(c.placementRate) === bestPlacement)?.collegeName || 'N/A'}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Lowest Fees</span>
+                <span class="summary-value badge-best-fees">${colleges.find(c => Number(c.fees) === lowestFees)?.collegeName || 'N/A'}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Best Cutoff</span>
+                <span class="summary-value badge-best-cutoff">${colleges.find(c => Number(c.cutoff) === lowestCutoff)?.collegeName || 'N/A'}</span>
+            </div>
+        </div>
+    </div>`;
+
+    const content = `<div class="comparison-modal">
+        <p class="comparison-info">Comparing <strong>${colleges.length}</strong> colleges</p>
+        ${tableHtml}
+        ${summaryHtml}
+    </div>`;
+
+    console.log("Calling openModal...");
+    openModal("College Comparison", content, true);
+}
+
+function openModal(title, content, isLarge = false) {
+    console.log("openModal called with title:", title);
+    console.log("Modal elements - modalTitle:", !!document.getElementById("modalTitle"), "modalContent:", !!document.getElementById("modalContent"), "modalOverlay:", !!document.getElementById("modalOverlay"));
+    
+    document.getElementById("modalTitle").textContent = title;
+    document.getElementById("modalContent").innerHTML = content;
+    if (isLarge) {
+        document.querySelector('.modal-container').classList.add('modal-large');
+    } else {
+        document.querySelector('.modal-container').classList.remove('modal-large');
+    }
+    document.getElementById("modalOverlay").classList.remove("d-none");
+    document.body.style.overflow = "hidden";
+    console.log("Modal should now be visible");
+}
+
+function closeModal() {
+    document.getElementById("modalOverlay").classList.add("d-none");
+    document.body.style.overflow = "";
+    document.getElementById("modalContent").innerHTML = "";
+}
+
+function closeModalOnOverlay(event) {
+    if (event.target === document.getElementById("modalOverlay")) {
+        closeModal();
+    }
+}
+
+document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+        closeModal();
+    }
+});

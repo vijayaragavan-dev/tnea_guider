@@ -136,6 +136,14 @@
     </section>
 </main>
 
+<div id="modalOverlay" class="modal-overlay d-none" onclick="closeModalOnOverlay(event)">
+    <div class="modal-container">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <h3 id="modalTitle" class="modal-title"></h3>
+        <div id="modalContent" class="modal-content"></div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="script.js"></script>
 </body>

@@ -8,34 +8,57 @@ DROP TABLE IF EXISTS categories;
 DROP TABLE IF EXISTS districts;
 
 CREATE TABLE districts (
+<<<<<<< Updated upstream
     id INT AUTO_INCREMENT PRIMARY KEY,
+=======
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+>>>>>>> Stashed changes
     name VARCHAR(100) UNIQUE NOT NULL
 );
 
 CREATE TABLE colleges (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+<<<<<<< Updated upstream
     district_id INT NOT NULL,
+=======
+    district_id BIGINT NOT NULL,
+>>>>>>> Stashed changes
     tier ENUM('Tier 1','Tier 2','Tier 3') NOT NULL,
     FOREIGN KEY (district_id) REFERENCES districts(id),
     UNIQUE KEY unique_college (name, district_id, tier)
 );
 
 CREATE TABLE branches (
+<<<<<<< Updated upstream
     id INT AUTO_INCREMENT PRIMARY KEY,
+=======
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+>>>>>>> Stashed changes
     name VARCHAR(50) UNIQUE NOT NULL
 );
 
 CREATE TABLE categories (
+<<<<<<< Updated upstream
     id INT AUTO_INCREMENT PRIMARY KEY,
+=======
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+>>>>>>> Stashed changes
     name VARCHAR(50) UNIQUE NOT NULL
 );
 
 CREATE TABLE cutoff_data (
+<<<<<<< Updated upstream
     id INT AUTO_INCREMENT PRIMARY KEY,
     college_id INT NOT NULL,
     branch_id INT NOT NULL,
     category_id INT NOT NULL,
+=======
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    college_id BIGINT NOT NULL,
+    branch_id BIGINT NOT NULL,
+    category_id BIGINT NOT NULL,
+>>>>>>> Stashed changes
     cutoff DECIMAL(5,2) NOT NULL,
     fees INT NOT NULL,
     placement_rate INT NOT NULL,
